@@ -1,0 +1,97 @@
+<?php
+
+// $Id$
+
+/**
+ * @file
+ * Check that username is not library card number ja numeric.
+ * After that check library card number; format and municipality code.
+ *
+ * Last modified: 21.01.2013 Mika Hatakka
+ */
+
+/**
+ * Implementation of hook_menu().
+ */
+function profile_validator_menu() {
+  $items = array();
+  $items['admin/settings/profile_validator'] = array(
+    'title' => 'Profile Validator',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('profile_validator_admin'),
+    'access arguments' => array('access administration pages'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  return $items;
+}
+
+function profile_validator_admin() {
+  $form['pf_municipalities'] = array(
+    '#title' => t('Municipalities'),
+    '#type' => 'textarea',
+    '#description' => t('All acceptable municipality numbers.'),
+    '#rows' => 12,
+    '#default_value' => variable_get('pf_municipalities', ''),
+  );
+
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Save')
+  );
+
+  return $form;
+}
+
+function profile_validator_admin_submit($form_id, &$form_state) {
+  if (isset($form_state['values']['pf_municipalities']) && !empty($form_state['values']['pf_municipalities'])) {
+    variable_set('pf_municipalities', $form_state['values']['pf_municipalities']);
+  }
+}
+
+/**
+ * Implementation of hook_form_alter().
+ *
+ * The function is named validator_form_alter.
+ */
+function profile_validator_form_alter(&$form, $form_state, $form_id) {
+  switch ($form_id) {
+    // User refistration Form.
+    case 'user_register':
+      $form['profile_kirjastokortti']['#element_validate'] = array('profile_validator_librarycard_number');
+      break;
+  }
+}
+
+/**
+ * This is the function used to validate the library card number.
+ */
+function profile_validator_librarycard_number($form, &$form_state) {
+  $ruid = $form_state['values']['name'];
+  if (preg_match("/^[0-9]{3}[aA]{1}[0-9]{1,}/i", $ruid) != 0) {
+    form_set_error('Registration', t('The username is not a valid authentication ID.'));
+    watchdog('user', t('Registration error: Given username is in library card number format. [@card]', array('@card' => $ruid)));
+  }
+  else if (is_numeric($ruid) == TRUE) {
+    form_set_error('Registration', t('The username is not a valid authentication ID.'));
+    watchdog('user', t('Registration error: Given username is a number. [@card]', array('@card' => $ruid)));
+  }
+  else {
+    $card = $form_state['values']['profile_kirjastokortti'];
+    // Kouvola basic format 286A012345
+    //     municipal number-^  ^^
+    //     'A' for customer----||
+    //     running number-------|
+    if (preg_match("/^[0-9]{3}[aA]{1}[0-9]{6}/i", $card) != 0) {
+      $municipalities = explode("\r\n", variable_get('pf_municipalities', array()));
+      $cnro = drupal_substr($card, 0, 3);
+      if (in_array($cnro, $municipalities) === FALSE) {
+        form_set_error('Registration', t('Library card number is not valid.'));
+        watchdog('user', t('Registration error: Library card number is not valid (municipality code). [@card]', array('@card' => $card)));
+      }
+    }
+    else {
+      form_set_error('Registration', t('Library card number is not valid.'));
+      watchdog('user', t('Registration error: Library card number is not valid. [@card]', array('@card' => $card)));
+    }
+  }
+}

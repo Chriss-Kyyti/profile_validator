@@ -1,0 +1,6 @@
+; $Id$
+name = Profile Validator
+description = Profile Validator validates input from profile fields.
+core = 6.x
+dependencies[] = profile
+version = "6.x-1.x-dev"
